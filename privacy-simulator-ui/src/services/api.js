@@ -1,14 +1,20 @@
-import axios from 'axios';
-
 const API_URL = "http://localhost:5000";
 
 export const submitSurvey = async ({ answers, userId }) => {
   try {
-    const response = await axios.post(`${API_URL}/submit`, {
-      answers,
-      userId,
+    const response = await fetch(`${API_URL}/submit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ answers, userId }),
     });
-    return response.data;
+
+    if (!response.ok) {
+      throw new Error("Survey submission failed");
+    }
+
+    return await response.json();
   } catch (error) {
     console.error("Error submitting survey:", error);
     throw error;

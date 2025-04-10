@@ -1,11 +1,13 @@
 from flask import Blueprint, request, jsonify
-from . import db  # This is correct
+from . import db  # your Firebase Firestore client
 from datetime import datetime
 from firebase_admin import firestore
 
+main = Blueprint("main", __name__)  # Blueprint name
 
-main = Blueprint("main", __name__)  # This name must match
-
+# --------------------------
+# 1. SUBMIT ROUTE
+# --------------------------
 @main.route("/submit", methods=["POST"])
 def submit():
     data = request.json
@@ -15,7 +17,7 @@ def submit():
         1 for answer in answers.values()
         if isinstance(answer, str) and answer.lower() in ["yes", "never"]
     )
-    risk = "High" if score >= 4 else "Medium" if score >= 2 else "Low"
+    risk = "High" if score >= 3 else "Medium" if score >= 1 else "Low"
 
     result = {
         "answers": answers,
@@ -28,8 +30,39 @@ def submit():
     # Save to Firestore
     db.collection("surveyResults").add(result)
 
-    # Prepare safe response
+    # Return safe preview (e.g. timestamp manually added)
     response_result = result.copy()
     response_result["submittedAt"] = str(datetime.utcnow())
 
     return jsonify(response_result)
+
+
+# --------------------------
+# 2. HISTORY ROUTE (for Chart)
+# --------------------------
+@main.route("/history/<user_id>", methods=["GET"])
+def get_user_history(user_id):
+    try:
+        print(f"📦 Fetching history for userId: {user_id}")
+
+        docs = (
+            db.collection("surveyResults")
+            .where("userId", "==", user_id)
+            .order_by("submittedAt")
+            .stream()
+        )
+
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            # Convert Firestore timestamp to ISO format for frontend
+            if "submittedAt" in data and hasattr(data["submittedAt"], "isoformat"):
+                data["submittedAt"] = data["submittedAt"].isoformat()
+            results.append(data)
+
+        return jsonify(results)
+
+    except Exception as e:
+        print("❌ Error fetching history:", e)
+        return jsonify({"error": str(e)}), 500
